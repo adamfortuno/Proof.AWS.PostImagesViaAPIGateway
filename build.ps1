@@ -1,7 +1,9 @@
-aws s3 ls "s3://03d16464a6d64e079417436b1da8cc8e" --profile "development"
+$bucket_name = $(New-Guid).Guid.ToLower().Replace('-','')
+
+aws s3 ls "s3://${bucket_name}" --profile "development"
 
 if ( $? -eq $false ) {
-    aws s3 mb "s3://03d16464a6d64e079417436b1da8cc8e" `
+    aws s3 mb "s3://${bucket_name}" `
     --profile "development" `
     --region "us-west-1"
 }
@@ -13,7 +15,7 @@ aws cloudformation validate-template `
 
 aws cloudformation package `
 --template-file .\app.yaml `
---s3-bucket "03d16464a6d64e079417436b1da8cc8e" `
+--s3-bucket "${bucket_name}" `
 --output-template-file .\package.yaml `
 --profile "development"
 
