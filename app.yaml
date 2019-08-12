@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion : "2010-09-09"
+Transform: "AWS::Serverless-2016-10-31"
+Description: "Proof of Concept for Matt"
+Globals:
+  Function:
+    Timeout: 15
+    Runtime: "nodejs10.x"
+  Api:
+    EndpointConfiguration: "REGIONAL"
+Resources:
+###################################################################
+##  Security and Permissions (IAM Resources)
+###################################################################
+  ExecuteApiMethodImageSubmit:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: 
+                - "apigateway.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "ExecuteApiMethodImageSubmitPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource: "*"
+  ExecuteImageReceive:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "ExecuteImageReceivePolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - "s3:PutObject"
+                Resource: "*"
+###################################################################
+##  Serverless Functions (Lambdas)
+###################################################################
+  ImageReceive:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: "./lambda/ImageReceive/"
+      Handler: "index.handler"
+      Role: !GetAtt [ "ExecuteImageReceive", "Arn" ]
+      Environment:
+        Variables:
+          ImageBucket: !Ref "ImageRepository"
+###################################################################
+##  REST APIs and their Resources and Methods
+###################################################################
+  ApiDefault:
+    Type: "AWS::ApiGateway::RestApi"
+    Properties:
+      Name: "-Default"
+      Description: "Public interface for system-to-system order submissions."
+      FailOnWarnings: true
+  ApiDefaultDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - "ApiMethodImageSubmitPost"
+    Properties:
+      Description: "Production environment supporting version-1 of the interface."
+      RestApiId: !Ref "ApiDefault"
+      StageName: "v1"
+  ApiResourceImage:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      ParentId: !GetAtt ["ApiDefault", "RootResourceId"]
+      PathPart: "Image"
+      RestApiId: !Ref "ApiDefault"
+  ApiResourceImageSubmit:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      ParentId: !Ref "ApiResourceImage"
+      PathPart: "submit"
+      RestApiId: !Ref "ApiDefault"
+  ApiMethodImageSubmitPost:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      HttpMethod: "POST"
+      AuthorizationType: "NONE"
+      Integration:
+        IntegrationHttpMethod: "POST"
+        Type: "AWS_PROXY"
+        IntegrationResponses:
+          - StatusCode: "200"
+        Credentials: !GetAtt [ "ExecuteApiMethodImageSubmit", "Arn" ]
+        Uri: !Sub
+          - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations"
+          - lambdaArn: !GetAtt [ "ImageReceive", "Arn" ]
+      MethodResponses:
+        - StatusCode: "200"
+      RestApiId: !Ref "ApiDefault"
+      ResourceId: !Ref "ApiResourceImageSubmit"
+###################################################################
+##  S3 Buckets
+###################################################################
+  ImageRepository:
+    Type: "AWS::S3::Bucket"
+    Properties: 
+      AccessControl: "PublicRead"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
