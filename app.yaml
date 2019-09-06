@@ -83,7 +83,7 @@ Resources:
   ApiDefault:
     Type: "AWS::ApiGateway::RestApi"
     Properties:
-      Name: "-Default"
+      Name: "Default"
       Description: "Public interface for system-to-system order submissions."
       FailOnWarnings: true
   ApiDefaultDeployment:
@@ -109,6 +109,7 @@ Resources:
   ApiMethodImageSubmitPost:
     Type: "AWS::ApiGateway::Method"
     Properties:
+      ApiKeyRequired: true
       HttpMethod: "POST"
       AuthorizationType: "NONE"
       Integration:
@@ -124,6 +125,26 @@ Resources:
         - StatusCode: "200"
       RestApiId: !Ref "ApiDefault"
       ResourceId: !Ref "ApiResourceImageSubmit"
+  ApiKey:
+    Type: "AWS::ApiGateway::ApiKey"
+    Properties: 
+      Description: "DECO Preprocessor Artwork Reservation Key"
+      Enabled: true
+      GenerateDistinctId: false
+  ApiUsagePlan:
+    Type: "AWS::ApiGateway::UsagePlan"
+    DependsOn:
+      - "ApiDefaultDeployment"
+    Properties:
+      ApiStages: 
+      - ApiId: !Ref "ApiDefault"
+        Stage: "v1"
+  ApiUsagePlanKey:
+    Type: "AWS::ApiGateway::UsagePlanKey"
+    Properties:
+      KeyId: !Ref "ApiKey"
+      KeyType: API_KEY
+      UsagePlanId: !Ref "ApiUsagePlan"
 ###################################################################
 ##  S3 Buckets
 ###################################################################
